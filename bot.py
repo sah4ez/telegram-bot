@@ -1,4 +1,5 @@
-from telegram import (LabeledPrice, ShippingOption, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup)
+from telegram import (LabeledPrice, ForceReply, ShippingOption, ReplyKeyboardMarkup, KeyboardButton,
+                      InlineKeyboardMarkup)
 from telegram.ext import (Updater, CommandHandler, RegexHandler, MessageHandler, ConversationHandler,
                           Filters, PreCheckoutQueryHandler, ShippingQueryHandler)
 import sys
@@ -7,7 +8,7 @@ import property
 import glob
 import random
 
-logging.basicConfig(filename=property.LOG_FILE, level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger("__main__")
 
@@ -46,19 +47,44 @@ def find_photo():
     return list_photo[el - 1]
 
 
+state = 0
+ids = []
+
 def mortgage(bot, update):
+    global state
+    global ids
     msg = "ipoteka-ipoteka"
-    update.message.reply_text(msg)
-    price1(bot=bot, update=update)
-    price2(bot=bot, update=update)
+    chat_id = update.message.chat_id
+    if chat_id in ids:
+        state = 2
+    ids.append(update.message.chat_id)
+    update.message.reply_text(
+        msg,
+        reply_markup=ForceReply(selective=True))
+    update.message.reply_text(
+        "стоимость жилья",
+        reply_markup=ForceReply(selective=True))
+    print(update.message.text)
 
 
-def price1(bot, update):
-    print('1')
+i = 0
 
+def calc(bot, update):
+    global state
+    global i
+    if state == 2:
+        update.message.reply_text("Number 1")
+        state = 3
+        i += int(update.message.text)
+    elif state == 3:
+        update.message.reply_text("Number 2")
+        state = 4
+        i += int(update.message.text)
+    elif state == 4:
+        state = 0
+        update.message.reply_text("Summ" + str(i))
 
-def price2(bot, update):
-    print('2')
+    print("state", state)
 
 
 def error(bot, update, error_msg):
@@ -76,6 +102,7 @@ def main(token):
     dp.add_handler(RegexHandler(property.SITE, site))
     dp.add_handler(RegexHandler(property.SALE, sale))
     dp.add_handler(RegexHandler(property.MORTGAGE, mortgage))
+    dp.add_handler(RegexHandler('[0-9]', calc))
 
     dp.add_handler(CommandHandler(property.CMD_SALE, sale))
     dp.add_handler(CommandHandler(property.CMD_SITE, site))
