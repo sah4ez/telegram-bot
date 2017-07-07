@@ -9,8 +9,16 @@ import glob
 import random
 
 logging.basicConfig(level=logging.DEBUG)
-
 logger = logging.getLogger("__main__")
+
+ids_state = {}
+ids_sum = {}
+
+
+# properties = {
+#     property.STATES: {ids_state},
+#     property.NUMBERS: {ids_sum},
+# }
 
 
 def start(bot, update):
@@ -47,44 +55,51 @@ def find_photo():
     return list_photo[el - 1]
 
 
-state = 0
-ids = []
-
 def mortgage(bot, update):
-    global state
-    global ids
-    msg = "ipoteka-ipoteka"
+    msg = property.MORTGAGE_PHRASE_1
     chat_id = update.message.chat_id
-    if chat_id in ids:
-        state = 2
-    ids.append(update.message.chat_id)
-    update.message.reply_text(
-        msg,
-        reply_markup=ForceReply(selective=True))
-    update.message.reply_text(
-        "стоимость жилья",
-        reply_markup=ForceReply(selective=True))
-    print(update.message.text)
+    states = ids_state
+    if chat_id not in states.keys():
+        states[chat_id] = 2
+        ids_sum[chat_id] = [0, 0, 0]
+        update.message.reply_text(msg)
 
-
-i = 0
 
 def calc(bot, update):
-    global state
-    global i
+    chat_id = update.message.chat_id
+    if chat_id not in ids_sum.keys() or chat_id not in ids_state.keys():
+        return
+
+    state = ids_state[chat_id]
+    num = ids_sum[chat_id]
     if state == 2:
-        update.message.reply_text("Number 1")
-        state = 3
-        i += int(update.message.text)
+        update.message.reply_text(property.MORTGAGE_PHRASE_2)
+        ids_state[chat_id] = 3
+        num[0] = int(update.message.text)
     elif state == 3:
-        update.message.reply_text("Number 2")
-        state = 4
-        i += int(update.message.text)
+        update.message.reply_text(property.MORTGAGE_PHRASE_3)
+        ids_state[chat_id] = 4
+        num[1] = int(update.message.text)
     elif state == 4:
         state = 0
-        update.message.reply_text("Summ" + str(i))
+        num[2] = int(update.message.text)
+        percent = 0.12
+        vsego = num[1] * num[2]
+        perv_vznos = num[0] - vsego
+        mes_vznos = num[2] * (1 + percent)
+
+        update.message.reply_text(
+            property.MORTGAGE_PHRASE_4 % (perv_vznos, mes_vznos, num[1], percent * 100))
+        cancel(bot, update)
 
     print("state", state)
+
+
+def cancel(bot, update):
+    chat_id = update.message.chat_id
+    del ids_state[chat_id]
+    del ids_sum[chat_id]
+    logger.debug(ids_state.__len__())
 
 
 def error(bot, update, error_msg):
@@ -107,6 +122,7 @@ def main(token):
     dp.add_handler(CommandHandler(property.CMD_SALE, sale))
     dp.add_handler(CommandHandler(property.CMD_SITE, site))
     dp.add_handler(CommandHandler(property.CMD_MORTGAGE, mortgage))
+    dp.add_handler(CommandHandler(property.CMD_CANCEL, cancel))
 
     dp.add_error_handler(error)
 
