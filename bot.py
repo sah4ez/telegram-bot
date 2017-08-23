@@ -1,128 +1,62 @@
-from telegram import (LabeledPrice, ForceReply, ShippingOption, ReplyKeyboardMarkup, KeyboardButton,
-                      InlineKeyboardMarkup)
-from telegram.ext import (Updater, CommandHandler, RegexHandler, MessageHandler, ConversationHandler,
-                          Filters, PreCheckoutQueryHandler, ShippingQueryHandler)
 import sys
-import logging
+from os import environ as env
+
+from telegram.ext import (Updater, CommandHandler, RegexHandler)
+
+import bot_log
+import cmd_help
+import cmd_sale
+import cmd_site
+import cmd_start
+import mortgage as m
 import property
-import glob
-import random
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger("__main__")
-
+LOG = bot_log.get_logger("main")
+mortgage = m.Mortgage()
 ids_state = {}
 ids_sum = {}
 
-
-# properties = {
-#     property.STATES: {ids_state},
-#     property.NUMBERS: {ids_sum},
-# }
-
-
-def start(bot, update):
-    msg = "hello!"
-    reply_keyboard = [[property.SITE, property.SALE], [property.MORTGAGE]]
-
-    update.message.reply_text(
-        msg,
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True))
+TOKEN = env.get("TOKEN_BOT")
+if TOKEN is None:
+    TOKEN = sys.argv[1]
+LOG.info('Token is loaded: %s' % TOKEN is not None)
 
 
-def help(bot, update):
-    msg = "help.."
-    update.message.reply_text(msg)
+def cmd_mortgage(bot, updater):
+    m.cmd(bot, update=updater, ids_state=ids_state, ids_sum=ids_sum)
 
 
-def site(bot, update):
-    msg = property.URL
-    update.message.reply_text(msg)
+def cmd_calc(bot, updater):
+    m.calc(bot, update=updater, ids_state=ids_state, ids_sum=ids_sum)
 
 
-def sale(bot, update):
-    msg = property.SALE_TEXT
-    chat_id = update.message.chat_id
-    path = find_photo()
-    bot.send_photo(chat_id=chat_id, caption=msg, photo=open(path, 'rb'))
-    # rep_msg_id = update.message.message_id
-    # bot.send_photo(chat_id=chat_id, reply_to_message_id=rep_msg_id, caption=msg, photo=open(path, 'rb'))
-
-
-def find_photo():
-    list_photo = glob.glob('./pictures/*.jpg')
-    el = random.randint(0, list_photo.__len__())
-    return list_photo[el - 1]
-
-
-def mortgage(bot, update):
-    msg = property.MORTGAGE_PHRASE_1
-    chat_id = update.message.chat_id
-    states = ids_state
-    if chat_id not in states.keys():
-        states[chat_id] = 2
-        ids_sum[chat_id] = [0, 0, 0]
-        update.message.reply_text(msg)
-
-
-def calc(bot, update):
-    chat_id = update.message.chat_id
-    if chat_id not in ids_sum.keys() or chat_id not in ids_state.keys():
-        return
-
-    state = ids_state[chat_id]
-    num = ids_sum[chat_id]
-    if state == 2:
-        update.message.reply_text(property.MORTGAGE_PHRASE_2)
-        ids_state[chat_id] = 3
-        num[0] = int(update.message.text)
-    elif state == 3:
-        update.message.reply_text(property.MORTGAGE_PHRASE_3)
-        ids_state[chat_id] = 4
-        num[1] = int(update.message.text)
-    elif state == 4:
-        state = 0
-        num[2] = int(update.message.text)
-        percent = 0.12
-        vsego = num[1] * num[2]
-        perv_vznos = num[0] - vsego
-        mes_vznos = num[2] * (1 + percent)
-
-        update.message.reply_text(
-            property.MORTGAGE_PHRASE_4 % (perv_vznos, mes_vznos, num[1], percent * 100))
-        cancel(bot, update)
-
-    print("state", state)
-
-
-def cancel(bot, update):
-    chat_id = update.message.chat_id
-    del ids_state[chat_id]
-    del ids_sum[chat_id]
-    logger.debug(ids_state.__len__())
+def cmd_cancel(bot, updater):
+    m.cancel(bot, update=updater, ids_state=ids_state, ids_sum=ids_sum)
 
 
 def error(bot, update, error_msg):
-    logger.warning('Update "%s" caused error "%s"' % (update, error_msg))
+    LOG.warning('Update "%s" caused error "%s"' % (update, error_msg))
 
 
-def main(token):
-    updater = Updater(token=token)
+def main():
+    updater = Updater(token=TOKEN)
 
     dp = updater.dispatcher
 
-    dp.add_handler(CommandHandler(property.CMD_START, start))
-    dp.add_handler(CommandHandler(property.CMD_HELP, help))
+    dp.add_handler(CommandHandler(property.CMD_START, cmd_start.start))
+    dp.add_handler(CommandHandler(property.CMD_HELP, cmd_help.help))
 
-    dp.add_handler(RegexHandler(property.SITE, site))
-    dp.add_handler(RegexHandler(property.SALE, sale))
-    dp.add_handler(RegexHandler(property.MORTGAGE, mortgage))
-    dp.add_handler(RegexHandler('[0-9]', calc))
+    dp.add_handler(RegexHandler(property.BT_SITE, cmd_site.site))
+    dp.add_handler(CommandHandler(property.CMD_SITE, cmd_site.site))
 
-    dp.add_handler(CommandHandler(property.CMD_SALE, sale))
-    dp.add_handler(CommandHandler(property.CMD_SITE, site))
-    dp.add_handler(CommandHandler(property.CMD_MORTGAGE, mortgage))
-    dp.add_handler(CommandHandler(property.CMD_CANCEL, cancel))
+    dp.add_handler(RegexHandler(property.BT_SALE, cmd_sale.sale))
+    dp.add_handler(CommandHandler(property.CMD_SALE, cmd_sale.sale))
+
+    dp.add_handler(RegexHandler(property.BT_MORTGAGE, cmd_mortgage))
+    dp.add_handler(RegexHandler('[0-9]', cmd_calc))
+    dp.add_handler(CommandHandler(property.CMD_MORTGAGE, cmd_mortgage))
+
+    dp.add_handler(CommandHandler(property.CMD_CANCEL, cmd_cancel))
 
     dp.add_error_handler(error)
 
@@ -135,4 +69,4 @@ def main(token):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1])
+    main()
